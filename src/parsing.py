@@ -6,12 +6,15 @@ class ParseFile():
 
     def __init__(self, file_path: str) -> None:
         self.file_path = file_path
-        self.lines = [str]
+        self.lines = []
         with open(file_path, "r") as f:
             for line in f:
                 if line.startswith("#"):
                     continue
                 self.lines.append(line)
+        self.start_hub = self.get_start_hub()
+        self.end_hub = self.get_end_hub()
+        self.hubs = self.get_all_hubs()
 
     def check_file(self) -> bool:
         """Check if the file is valid."""
@@ -23,15 +26,14 @@ class ParseFile():
                     continue
                 elif i == 0:
                     self.check_nb_drones(line)
-                elif line.startswith("start_hub"):
+                elif line.startswith("start_hub:"):
                     self.check_hub(line, i+1)
-                elif line.startswith("end_hub"):
+                elif line.startswith("end_hub:"):
                     self.check_hub(line, i+1)
-                elif line.startswith("hub"):
+                elif line.startswith("hub:"):
                     self.check_hub(line, i+1)
-                elif line.startswith("connection"):
-                    # self.check_connection(line, i+1)
-                    continue
+                elif line.startswith("connection:"):
+                    self.check_connection(line, i+1)
                 else:
                     raise ValueError(f"Line {i+1} is invalid: {line.strip()}")
         return True
@@ -50,7 +52,7 @@ class ParseFile():
             raise ValueError("line '1' 'nb_drones' must be a positive integer")
 
     @staticmethod
-    def check_hub(line: str, line_number: int) -> None:
+    def check_hub(line: str, line_number: int) -> bool:
         """Check if the line is a valid hub line."""
         parts = line.split()
         if len(parts) < 5:
@@ -67,7 +69,7 @@ class ParseFile():
         try:
             temp = (line.split()[4:])
         except IndexError:
-            return 1
+            return True
         temp[0] = temp[0][1:]
         temp[-1] = temp[-1][:-1]
         for data in temp:
@@ -86,7 +88,38 @@ class ParseFile():
                     raise ValueError(f"Line {line_number}: invalid zone_type: {data}")
             else:
                 raise ValueError(f"Line {line_number}: unknown metadata: {data}")
-        return 1
+        return True
+
+    def check_connection(self, line: str, line_number: int) -> bool:
+        con1_valid = False
+        con2_valid = False
+        parts = line.split()
+        connections = parts[1].split("-")
+        if self.start_hub.get_zone_name() == connections[0]:
+            con1_valid = True
+        elif self.end_hub.get_zone_name() == connections[0]:
+            con1_valid = True
+        else:
+            for hub in self.hubs:
+                if hub.get_zone_name() == connections[0]:
+                    con1_valid = True
+                    break
+            if con1_valid == False:
+                raise ValueError(f"Connection {connections[0]} on Line {line_number} does not exist")
+        if self.start_hub.get_zone_name() == connections[1]:
+            con2_valid = True
+        elif self.end_hub.get_zone_name() == connections[1]:
+            con2_valid = True
+        else:
+            for hub in self.hubs:
+                if hub.get_zone_name() == connections[1]:
+                    con2_valid = True
+                    break
+            if con2_valid == False:
+                raise ValueError(f"Connection {connections[1]} on Line {line_number} does not exist")
+        if con1_valid and con2_valid:
+            return True
+        return False
 
     def get_nb_drones(self) -> int:
         """Return the number of drones from the file."""
@@ -155,19 +188,28 @@ class ParseFile():
     @staticmethod
     def get_max_drones(line: str) -> int:
         """Return the maximum number of drones for a zone from a line."""
-        return int(line.split()[4])
+        args = line.split()
+        for arg in args:
+            if arg.startswith("max_drones="):
+                temp = arg.split("=")
+                return temp[1]
+        return -1
 
     @staticmethod
     def get_zone_type(line: str) -> structure.ZoneType:
         """Return the zone type from a line."""
-        return structure.ZoneType(line.split()[2])
+        args = line.split()
+        for arg in args:
+            if arg.startswith("zone="):
+                temp = arg.split("=")
+                return structure.ZoneType.get_zone_type(temp[1])
+        return structure.ZoneType.NORMAL
 
     @staticmethod
     def get_metadata_zone(line: str) -> str:
         """Return the metadata zone type from a line."""
         if not line.startswith("connection") and not line.startswith("nb_d"):
-           y
-        raise ValueError("Line needs to be a hub")
+            raise ValueError("Line needs to be a hub")
 
     @staticmethod
     def get_metadata_color(line: str) -> str:
@@ -224,5 +266,6 @@ class ParseFile():
 parser = ParseFile("data.txt")
 try:
     parser.check_file()
+    print("File is valid!")
 except ValueError as e:
     print(f"Error: {e}")

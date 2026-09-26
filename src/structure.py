@@ -95,6 +95,9 @@ class Zone:
             raise EmptyOccupantError(f"Zone {self.name} has no drones to remove.")
         self.current_drones -= 1
 
+    def get_zone_name(self) -> str:
+        return self.name
+
     def __repr__(self) -> str:
         return f"Zone({self.name}, type={self.zone_type.value})"
 
