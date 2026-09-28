@@ -9,7 +9,7 @@ class ZoneCapacityError(Exception):
 
 
 class EmptyOccupantError(Exception):
-    """Raised when a drone is removed from a zone or connection that is empty."""
+    """Raised when a drone is removed from an empty zone or connection."""
 
 
 class UnknownZoneError(Exception):
@@ -35,6 +35,7 @@ class ZoneType(Enum):
             raise ValueError(f"{self.name} zones cannot be entered.")
         return costs[self]
 
+    @staticmethod
     def get_zone_type(zone_type_str: str) -> ZoneType:
         """Return the ZoneType corresponding to a string."""
         if zone_type_str == "normal":
@@ -92,7 +93,9 @@ class Zone:
     def remove_drone(self) -> None:
         """Remove one drone from this zone's occupancy count."""
         if self.current_drones <= 0:
-            raise EmptyOccupantError(f"Zone {self.name} has no drones to remove.")
+            raise EmptyOccupantError(
+                f"Zone {self.name} has no drones to remove."
+            )
         self.current_drones -= 1
 
     def get_zone_name(self) -> str:
@@ -105,7 +108,9 @@ class Zone:
 class Connection:
     """A bidirectional edge between two zones."""
 
-    def __init__(self, zone1: Zone, zone2: Zone, max_link_capacity: int = 1) -> None:
+    def __init__(
+        self, zone1: Zone, zone2: Zone, max_link_capacity: int = 1
+    ) -> None:
         """Initialize a Connection."""
         self.zone1 = zone1
         self.zone2 = zone2
@@ -123,10 +128,12 @@ class Connection:
             return self.zone2
         if zone is self.zone2:
             return self.zone1
-        raise ValueError(f"Zone {zone.name} is not an endpoint of {self.name}.")
+        raise ValueError(
+            f"Zone {zone.name} is not an endpoint of {self.name}."
+        )
 
     def has_capacity(self) -> bool:
-        """Return whether one more drone may currently traverse this connection."""
+        """Return whether one more drone may traverse this connection now."""
         return self.current_drones < self.max_link_capacity
 
     def add_drone(self) -> None:
@@ -141,7 +148,9 @@ class Connection:
     def remove_drone(self) -> None:
         """Remove one drone from this connection's occupancy count."""
         if self.current_drones <= 0:
-            raise EmptyOccupantError(f"Connection {self.name} has no drones to remove.")
+            raise EmptyOccupantError(
+                f"Connection {self.name} has no drones to remove."
+            )
         self.current_drones -= 1
 
     def __repr__(self) -> str:
@@ -155,12 +164,14 @@ class Graph:
         """Initialize an empty graph."""
         self.zones: dict[str, Zone] = {}
         self.connections: dict[tuple[str, str], Connection] = {}
+        self.adjacency: dict[str, list[Connection]] = {}
         self.start: Optional[Zone] = None
         self.end: Optional[Zone] = None
 
     def add_zone(self, zone: Zone) -> None:
         """Add a zone to the graph, tracking start/end if flagged."""
         self.zones[zone.name] = zone
+        self.adjacency.setdefault(zone.name, [])
         if zone.is_start:
             self.start = zone
         if zone.is_end:
@@ -174,13 +185,15 @@ class Graph:
 
     @staticmethod
     def _key(name1: str, name2: str) -> tuple[str, str]:
-        """Return a normalized, order-independent key for a pair of zone names."""
+        """Return an order-independent key for a pair of zone names."""
         return (name1, name2) if name1 <= name2 else (name2, name1)
 
     def add_connection(self, connection: Connection) -> None:
-        """Add a connection to the graph, indexed for lookup in either direction."""
+        """Add a connection, indexed for lookup in either direction."""
         key = self._key(connection.zone1.name, connection.zone2.name)
         self.connections[key] = connection
+        self.adjacency.setdefault(connection.zone1.name, []).append(connection)
+        self.adjacency.setdefault(connection.zone2.name, []).append(connection)
 
     def get_connection(self, zone1: Zone, zone2: Zone) -> Optional[Connection]:
         """Look up the connection between two zones, in either direction."""
@@ -189,13 +202,10 @@ class Graph:
 
     def neighbors(self, zone: Zone) -> list[Zone]:
         """Return all zones directly connected to zone."""
-        result: list[Zone] = []
-        for (name1, name2), connection in self.connections.items():
-            if name1 == zone.name:
-                result.append(self.zones[name2])
-            elif name2 == zone.name:
-                result.append(self.zones[name1])
-        return result
+        return [
+            connection.other_end(zone)
+            for connection in self.adjacency.get(zone.name, [])
+        ]
 
 
 class Drone:
@@ -211,7 +221,7 @@ class Drone:
         self.finished = False
 
     def is_in_transit(self) -> bool:
-        """Return whether the drone is mid-flight on a multi-turn connection."""
+        """Return whether the drone is mid-flight on a connection."""
         return self.in_transit_connection is not None
 
     def start_transit(self, connection: Connection, turns: int) -> None:
@@ -237,7 +247,11 @@ class Drone:
             self.finished = True
 
     def __repr__(self) -> str:
-        where = self.current_zone.name if self.current_zone else self.in_transit_connection
+        where = (
+            self.current_zone.name
+            if self.current_zone
+            else self.in_transit_connection
+        )
         return f"Drone({self.drone_id}, at={where})"
 
 
@@ -261,6 +275,8 @@ class Simulation:
 
     def record_turn(self, moves: dict[str, str]) -> None:
         """Append one formatted line to the simulation log."""
-        line = " ".join(f"{drone_id}-{dest}" for drone_id, dest in moves.items())
+        line = " ".join(
+            f"{drone_id}-{dest}" for drone_id, dest in moves.items()
+        )
         self.log.append(line)
         self.turn += 1

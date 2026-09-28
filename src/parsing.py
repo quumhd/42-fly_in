@@ -1,271 +1,241 @@
+import re
+from typing import Optional
 
 import structure
 
 
-class ParseFile():
+class ParseError(Exception):
+    """Raised when the map file is invalid."""
+
+    def __init__(
+        self, message: str, line_number: Optional[int] = None
+    ) -> None:
+        """Build an error message that points at the offending line."""
+        if line_number is not None:
+            message = f"Line {line_number}: {message}"
+        super().__init__(message)
+
+
+class ParseFile:
+    """Parse a map file and build the drone network from it."""
+
+    ZONE_PREFIXES: tuple[str, ...] = ("start_hub", "end_hub", "hub")
+    ZONE_KEYS: tuple[str, ...] = ("zone", "color", "max_drones")
+    CONNECTION_KEYS: tuple[str, ...] = ("max_link_capacity",)
+    FORBIDDEN_NAME_CHARS: tuple[str, ...] = ("-", "–", "—")
 
     def __init__(self, file_path: str) -> None:
+        """Store the file path; call parse() to read the file."""
         self.file_path = file_path
-        self.lines = []
-        with open(file_path, "r") as f:
-            for line in f:
-                if line.startswith("#"):
-                    continue
-                self.lines.append(line)
-        self.start_hub = self.get_start_hub()
-        self.end_hub = self.get_end_hub()
-        self.hubs = self.get_all_hubs()
+        self.nb_drones: int = 0
+        self.graph = structure.Graph()
 
-    def check_file(self) -> bool:
-        """Check if the file is valid."""
-        with open(self.file_path, "r") as f:
-            for i, line in enumerate(f):
-                if line.startswith("#"):
-                    continue
-                elif len(line) == 1:
-                    continue
-                elif i == 0:
-                    self.check_nb_drones(line)
-                elif line.startswith("start_hub:"):
-                    self.check_hub(line, i+1)
-                elif line.startswith("end_hub:"):
-                    self.check_hub(line, i+1)
-                elif line.startswith("hub:"):
-                    self.check_hub(line, i+1)
-                elif line.startswith("connection:"):
-                    self.check_connection(line, i+1)
-                else:
-                    raise ValueError(f"Line {i+1} is invalid: {line.strip()}")
-        return True
-
-    @staticmethod
-    def check_nb_drones(line: str) -> None:
-        """Check if the line is a valid nb_drones line."""
-        parts = line.split()
-        if len(parts) != 2:
-            raise ValueError("line '1' must be 'nb_drones <num>'")
-        if parts[0] != ("nb_drones:"):
-            raise ValueError("line '1' must be 'nb_drones <num>'")
-        if not parts[1].isdigit():
-            raise ValueError("line '1' must be 'nb_drones <num>'")
-        if int(parts[1]) < 1:
-            raise ValueError("line '1' 'nb_drones' must be a positive integer")
-
-    @staticmethod
-    def check_hub(line: str, line_number: int) -> bool:
-        """Check if the line is a valid hub line."""
-        parts = line.split()
-        if len(parts) < 5:
-            raise ValueError(f"parts Line {line_number} is invalid: {line[:-1]}")
-        if parts[0] not in ("start_hub:", "end_hub:", "hub:"):
-            raise ValueError(f"start Line {line_number} is invalid: {line[:-1]}")
-        if "-" in parts[1] or "–" in parts[1] or "—" in parts[1]:
-            raise ValueError(f"Line {line_number}: Name cannot contain '=': {line[:-1]}")
-        x, y = ParseFile.get_coordinates(line)
-        if not (isinstance(x, int) and isinstance(y, int)):
-            raise ValueError(f"Line {line_number}: invalid coordinates: {line[:-1]}")
-        if x < 0 or y < 0:
-            raise ValueError(f"Line {line_number}: coordinates need to be positive: {line[:-1]}")
+    def parse(self) -> structure.Graph:
+        """Read, validate and build the graph described by the file."""
         try:
-            temp = (line.split()[4:])
-        except IndexError:
-            return True
-        temp[0] = temp[0][1:]
-        temp[-1] = temp[-1][:-1]
-        for data in temp:
-            if data.startswith("max_drones="):
-                temp2 = data.split("=")
-                if not temp2[1].isdigit():
-                    raise ValueError(f"Line {line_number}: max_drones must be an integer: {data}")
-                if int(temp2[1]) < 1:
-                    raise ValueError(f"Line {line_number}: max_drones must be a positive integer: {data}")
-            elif data.startswith("color="):
-                temp2 = data.split("=")
-                # check if color is valid
-            elif data.startswith("zone="):
-                temp2 = data.split("=")
-                if temp2[1] not in ("normal", "priority", "restricted", "blocked"):
-                    raise ValueError(f"Line {line_number}: invalid zone_type: {data}")
-            else:
-                raise ValueError(f"Line {line_number}: unknown metadata: {data}")
-        return True
+            with open(self.file_path, "r") as f:
+                lines: list[str] = f.readlines()
+        except OSError as e:
+            raise ParseError(f"cannot read '{self.file_path}': {e.strerror}")
 
-    def check_connection(self, line: str, line_number: int) -> bool:
-        con1_valid = False
-        con2_valid = False
-        parts = line.split()
-        connections = parts[1].split("-")
-        if self.start_hub.get_zone_name() == connections[0]:
-            con1_valid = True
-        elif self.end_hub.get_zone_name() == connections[0]:
-            con1_valid = True
-        else:
-            for hub in self.hubs:
-                if hub.get_zone_name() == connections[0]:
-                    con1_valid = True
-                    break
-            if con1_valid == False:
-                raise ValueError(f"Connection {connections[0]} on Line {line_number} does not exist")
-        if self.start_hub.get_zone_name() == connections[1]:
-            con2_valid = True
-        elif self.end_hub.get_zone_name() == connections[1]:
-            con2_valid = True
-        else:
-            for hub in self.hubs:
-                if hub.get_zone_name() == connections[1]:
-                    con2_valid = True
-                    break
-            if con2_valid == False:
-                raise ValueError(f"Connection {connections[1]} on Line {line_number} does not exist")
-        if con1_valid and con2_valid:
-            return True
-        return False
-
-    def get_nb_drones(self) -> int:
-        """Return the number of drones from the file."""
-        if self.lines[0].startswith("nb_drones"):
-            return int(self.lines[0].split()[1])
-        raise ValueError("No nb_drones found at the beginning of the file.")
-
-    def get_start_hub(self) -> structure.Zone:
-        """Return the start hub zone."""
-        for line in self.lines:
-            if line.startswith("start_hub"):
-                return structure.Zone(
-                    name=self.get_name(line),
-                    x=self.get_coordinates(line)[0],
-                    y=self.get_coordinates(line)[1],
-                    zone_type=self.get_zone_type(line),
-                    max_drones=self.get_max_drones(line),
-                    color=self.get_metadata_color(line),
-                    is_start=True,
-                )
-        raise ValueError("No start_hub found in the file.")
-
-    def get_end_hub(self) -> structure.Zone:
-        """Return the end hub zone."""
-        for line in self.lines:
-            if line.startswith("end_hub"):
-                return structure.Zone(
-                    name=self.get_name(line),
-                    x=self.get_coordinates(line)[0],
-                    y=self.get_coordinates(line)[1],
-                    zone_type=self.get_zone_type(line),
-                    max_drones=self.get_max_drones(line),
-                    color=self.get_metadata_color(line),
-                    is_end=True,
-                )
-        raise ValueError("No end_hub found in the file.")
-
-    def get_all_hubs(self) -> list[structure.Zone]:
-        """Return a list of all hub zones."""
-        hubs = []
-        for line in self.lines:
-            if line.startswith("hub"):
-                hubs.append(
-                    structure.Zone(
-                        name=self.get_name(line),
-                        x=self.get_coordinates(line)[0],
-                        y=self.get_coordinates(line)[1],
-                        zone_type=self.get_zone_type(line),
-                        max_drones=self.get_max_drones(line),
-                        color=self.get_metadata_color(line),
+        seen_nb_drones = False
+        for i, raw_line in enumerate(lines):
+            line_number = i + 1
+            content = raw_line.split("#", 1)[0].strip()
+            if not content:
+                continue
+            key, sep, rest = content.partition(":")
+            key = key.strip()
+            if not sep:
+                raise ParseError(f"missing ':' in '{content}'", line_number)
+            if not seen_nb_drones:
+                if key != "nb_drones":
+                    raise ParseError(
+                        "the first line must be 'nb_drones: <number>'",
+                        line_number,
                     )
+                self.nb_drones = self.parse_nb_drones(rest, line_number)
+                seen_nb_drones = True
+            elif key == "nb_drones":
+                raise ParseError("'nb_drones' defined twice", line_number)
+            elif key in self.ZONE_PREFIXES:
+                self.parse_zone(key, rest, line_number)
+            elif key == "connection":
+                self.parse_connection(rest, line_number)
+            else:
+                raise ParseError(f"unknown line type '{key}'", line_number)
+
+        if not seen_nb_drones:
+            raise ParseError("the file does not define 'nb_drones'")
+        if self.graph.start is None:
+            raise ParseError("the file does not define a 'start_hub'")
+        if self.graph.end is None:
+            raise ParseError("the file does not define an 'end_hub'")
+        return self.graph
+
+    @staticmethod
+    def parse_positive_int(value: str, what: str, line_number: int) -> int:
+        """Convert value to an int, requiring it to be a positive integer."""
+        if not re.fullmatch(r"[0-9]+", value) or int(value) < 1:
+            raise ParseError(
+                f"{what} must be a positive integer, got '{value}'",
+                line_number,
+            )
+        return int(value)
+
+    @staticmethod
+    def parse_int(value: str, what: str, line_number: int) -> int:
+        """Convert value to an int, requiring it to be an integer."""
+        if not re.fullmatch(r"-?[0-9]+", value):
+            raise ParseError(
+                f"{what} must be an integer, got '{value}'", line_number
+            )
+        return int(value)
+
+    def parse_nb_drones(self, rest: str, line_number: int) -> int:
+        """Return the number of drones from the text after 'nb_drones:'."""
+        parts = rest.split()
+        if len(parts) != 1:
+            raise ParseError(
+                "the first line must be 'nb_drones: <number>'", line_number
+            )
+        return self.parse_positive_int(parts[0], "nb_drones", line_number)
+
+    @staticmethod
+    def split_metadata(
+        rest: str, allowed_keys: tuple[str, ...], line_number: int
+    ) -> tuple[str, dict[str, str]]:
+        """Split 'body [k=v ...]' into the body and a metadata dict."""
+        if "[" not in rest:
+            if "]" in rest:
+                raise ParseError("unmatched ']' in metadata", line_number)
+            return rest, {}
+        start = rest.index("[")
+        if not rest.endswith("]"):
+            raise ParseError(
+                "metadata must be enclosed in '[...]' at the end of the line",
+                line_number,
+            )
+        inside = rest[start + 1:-1]
+        if "[" in inside or "]" in inside:
+            raise ParseError("only one metadata block is allowed", line_number)
+        metadata: dict[str, str] = {}
+        for item in inside.split():
+            key, sep, value = item.partition("=")
+            if not sep or not key or not value or "=" in value:
+                raise ParseError(
+                    f"invalid metadata '{item}', expected 'key=value'",
+                    line_number,
                 )
-        return hubs
+            if key not in allowed_keys:
+                raise ParseError(f"unknown metadata '{key}'", line_number)
+            if key in metadata:
+                raise ParseError(f"duplicate metadata '{key}'", line_number)
+            metadata[key] = value
+        return rest[:start], metadata
 
-    @staticmethod
-    def get_name(line: str) -> str:
-        """Return the name of a zone or connection from a line."""
-        return line.split()[1]
+    def check_name(self, name: str, line_number: int) -> None:
+        """Check that name is a legal zone name."""
+        for char in self.FORBIDDEN_NAME_CHARS:
+            if char in name:
+                raise ParseError(
+                    f"zone name '{name}' cannot contain dashes", line_number
+                )
 
-    @staticmethod
-    def get_coordinates(line: str) -> tuple[int, int]:
-        """Return the (x, y) coordinates of a zone from a line."""
-        _, _, x, y, *_ = line.split()
-        return int(x), int(y)
+    def parse_zone(self, kind: str, rest: str, line_number: int) -> None:
+        """Parse a start_hub, end_hub or hub line and add it to the graph."""
+        body, metadata = self.split_metadata(
+            rest, self.ZONE_KEYS, line_number
+        )
+        parts = body.split()
+        if len(parts) != 3:
+            raise ParseError(
+                f"expected '{kind}: <name> <x> <y> [metadata]'", line_number
+            )
+        name, x_str, y_str = parts
+        self.check_name(name, line_number)
+        if name in self.graph.zones:
+            raise ParseError(f"zone '{name}' is already defined", line_number)
+        x = self.parse_int(x_str, "x coordinate", line_number)
+        y = self.parse_int(y_str, "y coordinate", line_number)
 
-    @staticmethod
-    def get_max_drones(line: str) -> int:
-        """Return the maximum number of drones for a zone from a line."""
-        args = line.split()
-        for arg in args:
-            if arg.startswith("max_drones="):
-                temp = arg.split("=")
-                return temp[1]
-        return -1
-
-    @staticmethod
-    def get_zone_type(line: str) -> structure.ZoneType:
-        """Return the zone type from a line."""
-        args = line.split()
-        for arg in args:
-            if arg.startswith("zone="):
-                temp = arg.split("=")
-                return structure.ZoneType.get_zone_type(temp[1])
-        return structure.ZoneType.NORMAL
-
-    @staticmethod
-    def get_metadata_zone(line: str) -> str:
-        """Return the metadata zone type from a line."""
-        if not line.startswith("connection") and not line.startswith("nb_d"):
-            raise ValueError("Line needs to be a hub")
-
-    @staticmethod
-    def get_metadata_color(line: str) -> str:
-        """Return the metadata color from a line."""
-        if not line.startswith("connection") and not line.startswith("nb_d"):
+        zone_type = structure.ZoneType.NORMAL
+        if "zone" in metadata:
             try:
-                temp = (line.split()[4:])
-            except IndexError:
-                return None
-            temp[0] = temp[0][1:]
-            temp[-1] = temp[-1][:-1]
-            for data in temp:
-                if data.startswith("color="):
-                    temp2 = data.split("=")
-                    return temp2[1]
-            return None
-        raise ValueError("Line needs to be a hub")
+                zone_type = structure.ZoneType(metadata["zone"])
+            except ValueError:
+                raise ParseError(
+                    f"invalid zone type '{metadata['zone']}' (expected "
+                    "normal, blocked, restricted or priority)",
+                    line_number,
+                )
+        max_drones = 1
+        if "max_drones" in metadata:
+            max_drones = self.parse_positive_int(
+                metadata["max_drones"], "max_drones", line_number
+            )
 
-    @staticmethod
-    def get_metadata_max_drones(line: str) -> str:
-        """Return the metadata max drones from a line."""
-        if not line.startswith("connection") and not line.startswith("nb_d"):
-            try:
-                temp = (line.split()[4:])
-            except IndexError:
-                return 1
-            temp[0] = temp[0][1:]
-            temp[-1] = temp[-1][:-1]
-            for data in temp:
-                if data.startswith("max_drones="):
-                    temp2 = data.split("=")
-                    return int(temp2[1])
-            return 1
-        raise ValueError("Line needs to be a hub")
+        is_start = kind == "start_hub"
+        is_end = kind == "end_hub"
+        if is_start and self.graph.start is not None:
+            raise ParseError("there can only be one start_hub", line_number)
+        if is_end and self.graph.end is not None:
+            raise ParseError("there can only be one end_hub", line_number)
+        if (is_start or is_end) and zone_type is structure.ZoneType.BLOCKED:
+            raise ParseError(f"{kind} cannot be a blocked zone", line_number)
 
-    @staticmethod
-    def get_metadata_max_link_capacity(line: str) -> str:
-        """Return the metadata max link capacity from a line."""
-        if line.startswith("connection"):
-            try:
-                temp = (line.split()[2:])
-            except IndexError:
-                return 1
-            temp[0] = temp[0][1:]
-            temp[-1] = temp[-1][:-1]
-            for data in temp:
-                if data.startswith("max_link_capacity="):
-                    temp2 = data.split("=")
-                    return int(temp2[1])
-            return 1
-        raise ValueError("Line needs to be a connection")
+        self.graph.add_zone(
+            structure.Zone(
+                name=name,
+                x=x,
+                y=y,
+                zone_type=zone_type,
+                max_drones=max_drones,
+                color=metadata.get("color"),
+                is_start=is_start,
+                is_end=is_end,
+            )
+        )
 
-
-parser = ParseFile("data.txt")
-try:
-    parser.check_file()
-    print("File is valid!")
-except ValueError as e:
-    print(f"Error: {e}")
+    def parse_connection(self, rest: str, line_number: int) -> None:
+        """Parse a connection line and add it to the graph."""
+        body, metadata = self.split_metadata(
+            rest, self.CONNECTION_KEYS, line_number
+        )
+        parts = body.split()
+        if len(parts) != 1:
+            raise ParseError(
+                "expected 'connection: <zone1>-<zone2> [metadata]'",
+                line_number,
+            )
+        names = parts[0].split("-")
+        if len(names) != 2 or not names[0] or not names[1]:
+            raise ParseError(
+                f"invalid connection '{parts[0]}', expected '<zone1>-<zone2>'",
+                line_number,
+            )
+        for name in names:
+            if name not in self.graph.zones:
+                raise ParseError(
+                    f"zone '{name}' is not defined before this connection",
+                    line_number,
+                )
+        if names[0] == names[1]:
+            raise ParseError(
+                f"zone '{names[0]}' cannot connect to itself", line_number
+            )
+        zone1 = self.graph.zones[names[0]]
+        zone2 = self.graph.zones[names[1]]
+        if self.graph.get_connection(zone1, zone2) is not None:
+            raise ParseError(
+                f"connection '{parts[0]}' is already defined", line_number
+            )
+        capacity = 1
+        if "max_link_capacity" in metadata:
+            capacity = self.parse_positive_int(
+                metadata["max_link_capacity"], "max_link_capacity",
+                line_number,
+            )
+        self.graph.add_connection(
+            structure.Connection(zone1, zone2, max_link_capacity=capacity)
+        )
