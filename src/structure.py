@@ -186,14 +186,19 @@ class Graph:
     @staticmethod
     def _key(name1: str, name2: str) -> tuple[str, str]:
         """Return an order-independent key for a pair of zone names."""
-        return (name1, name2) if name1 <= name2 else (name2, name1)
+        if name1 <= name2:
+            return (name1, name2)
+        else:
+            return (name2, name1)
 
     def add_connection(self, connection: Connection) -> None:
         """Add a connection, indexed for lookup in either direction."""
         key = self._key(connection.zone1.name, connection.zone2.name)
         self.connections[key] = connection
-        self.adjacency.setdefault(connection.zone1.name, []).append(connection)
-        self.adjacency.setdefault(connection.zone2.name, []).append(connection)
+        for zone in (connection.zone1, connection.zone2):
+            if zone.name not in self.adjacency:
+                self.adjacency[zone.name] = []
+            self.adjacency[zone.name].append(connection)
 
     def get_connection(self, zone1: Zone, zone2: Zone) -> Optional[Connection]:
         """Look up the connection between two zones, in either direction."""
@@ -202,10 +207,13 @@ class Graph:
 
     def neighbors(self, zone: Zone) -> list[Zone]:
         """Return all zones directly connected to zone."""
-        return [
-            connection.other_end(zone)
-            for connection in self.adjacency.get(zone.name, [])
-        ]
+        result: list[Zone] = []
+        if zone.name not in self.adjacency:
+            return result
+        for connection in self.adjacency[zone.name]:
+            other_zone = connection.other_end(zone)
+            result.append(other_zone)
+        return result
 
 
 class Drone:
@@ -247,11 +255,10 @@ class Drone:
             self.finished = True
 
     def __repr__(self) -> str:
-        where = (
-            self.current_zone.name
-            if self.current_zone
-            else self.in_transit_connection
-        )
+        if self.current_zone is not None:
+            where = self.current_zone.name
+        else:
+            where = str(self.in_transit_connection)
         return f"Drone({self.drone_id}, at={where})"
 
 
@@ -271,12 +278,16 @@ class Simulation:
 
     def all_delivered(self) -> bool:
         """Return whether every registered drone has reached the end zone."""
-        return all(drone.finished for drone in self.drones.values())
+        for drone in self.drones.values():
+            if not drone.finished:
+                return False
+        return True
 
     def record_turn(self, moves: dict[str, str]) -> None:
         """Append one formatted line to the simulation log."""
-        line = " ".join(
-            f"{drone_id}-{dest}" for drone_id, dest in moves.items()
-        )
+        move_texts: list[str] = []
+        for drone_id, dest in moves.items():
+            move_texts.append(f"{drone_id}-{dest}")
+        line = " ".join(move_texts)
         self.log.append(line)
         self.turn += 1

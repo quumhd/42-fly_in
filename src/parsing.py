@@ -7,14 +7,6 @@ import structure
 class ParseError(Exception):
     """Raised when the map file is invalid."""
 
-    def __init__(
-        self, message: str, line_number: Optional[int] = None
-    ) -> None:
-        """Build an error message that points at the offending line."""
-        if line_number is not None:
-            message = f"Line {line_number}: {message}"
-        super().__init__(message)
-
 
 class ParseFile:
     """Parse a map file and build the drone network from it."""
@@ -41,7 +33,9 @@ class ParseFile:
         seen_nb_drones = False
         for i, raw_line in enumerate(lines):
             line_number = i + 1
-            content = raw_line.split("#", 1)[0].strip()
+            parts = raw_line.split("#", 1)
+            before_comment = parts[0]
+            content = before_comment.strip()
             if not content:
                 continue
             key, sep, rest = content.partition(":")
@@ -175,8 +169,16 @@ class ParseFile:
                 metadata["max_drones"], "max_drones", line_number
             )
 
-        is_start = kind == "start_hub"
-        is_end = kind == "end_hub"
+        if kind == "start_hub":
+            is_start = True
+        else:
+            is_start = False
+
+        if kind == "end_hub":
+            is_end = True
+        else:
+            is_end = False
+
         if is_start and self.graph.start is not None:
             raise ParseError("there can only be one start_hub", line_number)
         if is_end and self.graph.end is not None:
