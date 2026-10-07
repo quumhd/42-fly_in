@@ -18,8 +18,6 @@ def main() -> None:
     except ParseError as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
-    print(f"Parsed {parser.nb_drones} drones, {len(graph.zones)} zones, "
-          f"{len(graph.connections)} connections.")
     try:
         pathfinder = Pathfinding(graph)
         paths = pathfinder.plan_all_drones(parser.nb_drones)

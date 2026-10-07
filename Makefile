@@ -1,21 +1,25 @@
-
-NAME = fly_in
-
 CC = Python3
-
-SRCS_DIR = srcs
-
-SRCS = $(SRCS_DIR)/main.py \
-	   $(SRCS_DIR)/structure.py \
+SRCS = src
+MAP ?= maps/easy/01_linear_path.txt
 
 
-all: $(NAME)
+all: install run
 
-$(NAME):
-	$(CC) $(SRCS)
+run:
+	$(CC) $(SRCS)/main.py $(MAP)
+
+debug:
+	$(CC) -m pdb $(SRCS)/main.py $(MAP)
+
+lint:
+	flake8 .
+	mypy . --warn-return-any --warn-unused-ignores --ignore-missing-imports --disallow-untyped-defs --check-untyped-defs
+
+install:
+	$(CC) -m pip install -r requirements.txt
 
 clean:
+	find . -type d -name "__pycache__" -prune -exec rm -rf {} +
+	rm -rf .mypy_cache
 
-fclean: clean
-
-re: fclean all
+.PHONY: all install run debug clean lint
