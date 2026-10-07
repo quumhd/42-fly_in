@@ -4,6 +4,12 @@ from structure import Graph, Zone
 
 
 class Visualizer:
+    """Print the simulation turn by turn in colored terminal output.
+
+    Attributes:
+        graph: The network the drones fly through.
+    """
+
     DEFAULT_RGB: tuple[int, int, int] = (200, 200, 200)
     COLORS: dict[str, tuple[int, int, int]] = {
         "black": (60, 60, 60),
@@ -29,12 +35,25 @@ class Visualizer:
     }
 
     def __init__(self, graph: Graph) -> None:
-        """Store the graph the drones fly through."""
+        """Store the graph the drones fly through.
+
+        Args:
+            graph: The network the drones fly through.
+        """
         self.graph = graph
 
     @staticmethod
     def add_color(text: str, color: Optional[str]) -> str:
-        """Return text in the RGB color matching a color name from the map."""
+        """Return text in the RGB color matching a color name from the map.
+
+        Args:
+            text: The text to color.
+            color: A color name from the map, or None.
+
+        Returns:
+            The text wrapped in ANSI color codes. Unknown colors and None
+            use DEFAULT_RGB.
+        """
         if color is None:
             r, g, b = Visualizer.DEFAULT_RGB
         else:
@@ -45,14 +64,18 @@ class Visualizer:
     def run_visualization(
         self, paths: dict[str, list[tuple[int, Zone]]]
     ) -> None:
-        """Print one colored line of drone moves per turn."""
+        """Print one colored line of drone moves per turn.
+
+        Args:
+            paths: The planned path of each drone, keyed by drone id.
+        """
         turns = self.create_turns(paths)
         for t in range(1, max(turns) + 1):
             try:
                 moves = turns[t]
             except KeyError:
                 moves = []
-            words = []
+            words: list[str] = []
             for move in moves:
                 text = move[0]
                 zone = move[1]
@@ -63,7 +86,18 @@ class Visualizer:
     def create_turns(
         self, paths: dict[str, list[tuple[int, Zone]]]
     ) -> dict[int, list[tuple[str, Zone]]]:
-        """Group every drone move by the turn it happens on."""
+        """Group every drone move by the turn it happens on.
+
+        Args:
+            paths: The planned path of each drone, keyed by drone id.
+
+        Returns:
+            For each turn, the move texts (e.g. "D1-roof1") together with
+            the zone that gives them their color.
+
+        Raises:
+            ValueError: If a 2-turn move uses zones that are not connected.
+        """
         turns: dict[int, list[tuple[str, Zone]]] = {}
         for drone_id, path in paths.items():
             for (t_start, src), (t_end, dst) in zip(path, path[1:]):

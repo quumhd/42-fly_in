@@ -1,10 +1,36 @@
 import re
+from typing import Optional
 
 import structure
 
 
 class ParseError(Exception):
-    """Raised when the map file is invalid."""
+    """Raised when the map file is invalid.
+
+    Attributes:
+        message: What is wrong with the file.
+        line_number: The line the error was found on, or None if the error
+            concerns the whole file.
+    """
+
+    def __init__(
+        self, message: str, line_number: Optional[int] = None
+    ) -> None:
+        """Store the message and the line it refers to.
+
+        Args:
+            message: What is wrong with the file.
+            line_number: The line the error was found on, if any.
+        """
+        self.message = message
+        self.line_number = line_number
+        super().__init__(message)
+
+    def __str__(self) -> str:
+        """Return the message, prefixed with its line number if known."""
+        if self.line_number is None:
+            return self.message
+        return f"line {self.line_number}: {self.message}"
 
 
 class ParseFile:
@@ -13,16 +39,27 @@ class ParseFile:
     ZONE_PREFIXES: tuple[str, ...] = ("start_hub", "end_hub", "hub")
     ZONE_KEYS: tuple[str, ...] = ("zone", "color", "max_drones")
     CONNECTION_KEYS: tuple[str, ...] = ("max_link_capacity",)
-    FORBIDDEN_NAME_CHARS: tuple[str, ...] = ("-", "–", "—")
+    FORBIDDEN_NAME_CHARS: tuple[str, ...] = ("-",)
 
     def __init__(self, file_path: str) -> None:
-        """Store the file path; call parse() to read the file."""
+        """Store the file path; call parse() to read the file.
+
+        Args:
+            file_path: Path of the map file to parse.
+        """
         self.file_path = file_path
         self.nb_drones: int = 0
         self.graph = structure.Graph()
 
     def parse(self) -> structure.Graph:
-        """Read, validate and build the graph described by the file."""
+        """Read, validate and build the graph described by the file.
+
+        Returns:
+            The graph with all zones and connections of the file.
+
+        Raises:
+            ParseError: If the file cannot be read or is invalid.
+        """
         try:
             with open(self.file_path, "r") as f:
                 lines: list[str] = f.readlines()
@@ -68,7 +105,19 @@ class ParseFile:
 
     @staticmethod
     def parse_positive_int(value: str, what: str, line_number: int) -> int:
-        """Convert value to an int, requiring it to be a positive integer."""
+        """Convert value to an int, requiring it to be a positive integer.
+
+        Args:
+            value: The text to convert.
+            what: Name of the value, used in the error message.
+            line_number: The line the value comes from.
+
+        Returns:
+            The converted value.
+
+        Raises:
+            ParseError: If value is not a positive integer.
+        """
         if not re.fullmatch(r"[0-9]+", value) or int(value) < 1:
             raise ParseError(
                 f"{what} must be a positive integer, got '{value}'",
@@ -78,7 +127,19 @@ class ParseFile:
 
     @staticmethod
     def parse_int(value: str, what: str, line_number: int) -> int:
-        """Convert value to an int, requiring it to be an integer."""
+        """Convert value to an int, requiring it to be an integer.
+
+        Args:
+            value: The text to convert.
+            what: Name of the value, used in the error message.
+            line_number: The line the value comes from.
+
+        Returns:
+            The converted value.
+
+        Raises:
+            ParseError: If value is not an integer.
+        """
         if not re.fullmatch(r"-?[0-9]+", value):
             raise ParseError(
                 f"{what} must be an integer, got '{value}'", line_number
@@ -86,7 +147,18 @@ class ParseFile:
         return int(value)
 
     def parse_nb_drones(self, rest: str, line_number: int) -> int:
-        """Return the number of drones from the text after 'nb_drones:'."""
+        """Return the number of drones from the text after 'nb_drones:'.
+
+        Args:
+            rest: The text after 'nb_drones:'.
+            line_number: The line being parsed.
+
+        Returns:
+            The number of drones.
+
+        Raises:
+            ParseError: If the value is missing or not a positive integer.
+        """
         parts = rest.split()
         if len(parts) != 1:
             raise ParseError(
@@ -98,7 +170,19 @@ class ParseFile:
     def split_metadata(
         rest: str, allowed_keys: tuple[str, ...], line_number: int
     ) -> tuple[str, dict[str, str]]:
-        """Split 'body [k=v ...]' into the body and a metadata dict."""
+        """Split 'body [k=v ...]' into the body and a metadata dict.
+
+        Args:
+            rest: The text after the line prefix.
+            allowed_keys: The metadata keys accepted on this line.
+            line_number: The line being parsed.
+
+        Returns:
+            The text before the metadata block and the parsed metadata.
+
+        Raises:
+            ParseError: If the metadata block is malformed.
+        """
         if "[" not in rest:
             if "]" in rest:
                 raise ParseError("unmatched ']' in metadata", line_number)
@@ -128,7 +212,15 @@ class ParseFile:
         return rest[:start], metadata
 
     def check_name(self, name: str, line_number: int) -> None:
-        """Check that name is a legal zone name."""
+        """Check that name is a legal zone name.
+
+        Args:
+            name: The zone name to check.
+            line_number: The line being parsed.
+
+        Raises:
+            ParseError: If name contains a forbidden character.
+        """
         for char in self.FORBIDDEN_NAME_CHARS:
             if char in name:
                 raise ParseError(
@@ -136,7 +228,16 @@ class ParseFile:
                 )
 
     def parse_zone(self, kind: str, rest: str, line_number: int) -> None:
-        """Parse a start_hub, end_hub or hub line and add it to the graph."""
+        """Parse a start_hub, end_hub or hub line and add it to the graph.
+
+        Args:
+            kind: The line prefix (start_hub, end_hub or hub).
+            rest: The text after the prefix.
+            line_number: The line being parsed.
+
+        Raises:
+            ParseError: If the zone definition is invalid.
+        """
         body, metadata = self.split_metadata(
             rest, self.ZONE_KEYS, line_number
         )
@@ -199,7 +300,15 @@ class ParseFile:
         )
 
     def parse_connection(self, rest: str, line_number: int) -> None:
-        """Parse a connection line and add it to the graph."""
+        """Parse a connection line and add it to the graph.
+
+        Args:
+            rest: The text after 'connection:'.
+            line_number: The line being parsed.
+
+        Raises:
+            ParseError: If the connection definition is invalid.
+        """
         body, metadata = self.split_metadata(
             rest, self.CONNECTION_KEYS, line_number
         )
