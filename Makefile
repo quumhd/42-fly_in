@@ -1,4 +1,4 @@
-CC = Python3
+CC = python3
 SRCS = src
 MAP ?= maps/easy/01_linear_path.txt
 
@@ -7,6 +7,9 @@ all: install run
 
 run:
 	$(CC) $(SRCS)/main.py $(MAP)
+
+simple:
+	$(CC) $(SRCS)/main.py $(MAP) --simple
 
 debug:
 	$(CC) -m pdb $(SRCS)/main.py $(MAP)
