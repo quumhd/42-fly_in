@@ -2,6 +2,7 @@ CC = python3
 SRCS = src
 MAP ?= maps/easy/01_linear_path.txt
 
+.SILENT:
 
 all: install run
 
@@ -25,4 +26,4 @@ clean:
 	find . -type d -name "__pycache__" -prune -exec rm -rf {} +
 	rm -rf .mypy_cache
 
-.PHONY: all install run debug clean lint
+.PHONY: all install run simple debug clean lint
