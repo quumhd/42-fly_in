@@ -15,6 +15,9 @@ def main() -> None:
     if len(sys.argv) == 3 and "--simple" not in sys.argv:
         print("Usage: python3 main.py <map_file> [--simple]", file=sys.stderr)
         sys.exit(1)
+    if len(sys.argv) == 2 and "--simple" in sys.argv:
+        print("Usage: python3 main.py <map_file> [--simple]", file=sys.stderr)
+        sys.exit(1)
     simple = False
     if "--simple" in sys.argv:
         simple = True
