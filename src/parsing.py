@@ -63,7 +63,7 @@ class ParseFile:
         try:
             with open(self.file_path, "r") as f:
                 lines: list[str] = f.readlines()
-        except Exception as e:
+        except OSError as e:
             raise ParseError(f"cannot read '{self.file_path}': {e.strerror}")
 
         seen_nb_drones = False
