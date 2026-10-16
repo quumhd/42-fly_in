@@ -7,10 +7,10 @@ MAP ?= maps/easy/01_linear_path.txt
 all: install run
 
 run:
-	$(CC) $(SRCS)/main.py $(MAP)
+	$(CC) $(SRCS)/main.py $(MAP) --visualizer
 
-simple:
-	$(CC) $(SRCS)/main.py $(MAP) --simple
+no_visualizer:
+	$(CC) $(SRCS)/main.py $(MAP)
 
 debug:
 	$(CC) -m pdb $(SRCS)/main.py $(MAP)
@@ -26,4 +26,4 @@ clean:
 	find . -type d -name "__pycache__" -prune -exec rm -rf {} +
 	rm -rf .mypy_cache
 
-.PHONY: all install run simple debug clean lint
+.PHONY: all install run no_visualizer debug clean lint

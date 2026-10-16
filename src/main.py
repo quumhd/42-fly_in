@@ -8,23 +8,17 @@ from pathfinding import Pathfinding, PathfindingError
 
 
 def main() -> None:
-    """Parse the map given on the command line, plan and print the moves."""
-    if len(sys.argv) < 2 or len(sys.argv) > 3:
-        print("Usage: python3 main.py <map_file> [--simple]", file=sys.stderr)
+    """Parse the map given on the command line, plan and print the moves.
+
+    With the --visualizer flag, the drone counts and a summary are added.
+    """
+    args = [arg for arg in sys.argv[1:] if arg != "--visualizer"]
+    if len(args) != 1:
+        print("Usage: python3 main.py [--visualizer] <map_file>",
+              file=sys.stderr)
         sys.exit(1)
-    if len(sys.argv) == 3 and "--simple" not in sys.argv:
-        print("Usage: python3 main.py <map_file> [--simple]", file=sys.stderr)
-        sys.exit(1)
-    if len(sys.argv) == 2 and "--simple" in sys.argv:
-        print("Usage: python3 main.py <map_file> [--simple]", file=sys.stderr)
-        sys.exit(1)
-    simple = False
-    if "--simple" in sys.argv:
-        simple = True
-    if "--simple" == sys.argv[1]:
-        parser = ParseFile(sys.argv[2])
-    else:
-        parser = ParseFile(sys.argv[1])
+    detailed = "--visualizer" in sys.argv
+    parser = ParseFile(args[0])
     try:
         graph = parser.parse()
     except ParseError as e:
@@ -37,7 +31,7 @@ def main() -> None:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
     visualizer = Visualizer(graph)
-    visualizer.run_visualization(paths, simple)
+    visualizer.run_visualization(paths, detailed)
 
 
 if __name__ == "__main__":

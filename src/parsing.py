@@ -61,10 +61,12 @@ class ParseFile:
             ParseError: If the file cannot be read or is invalid.
         """
         try:
-            with open(self.file_path, "r") as f:
+            with open(self.file_path, "r", encoding="utf-8") as f:
                 lines: list[str] = f.readlines()
         except OSError as e:
             raise ParseError(f"cannot read '{self.file_path}': {e.strerror}")
+        except UnicodeDecodeError:
+            raise ParseError(f"cannot read '{self.file_path}'")
 
         seen_nb_drones = False
         for i, raw_line in enumerate(lines):

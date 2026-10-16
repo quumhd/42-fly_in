@@ -62,17 +62,19 @@ class Visualizer:
         return f"\033[38;2;{r};{g};{b}m{text}\033[0m"
 
     def run_visualization(
-        self, paths: dict[str, list[tuple[int, Zone]]], simple: bool
+        self, paths: dict[str, list[tuple[int, Zone]]], detailed: bool
     ) -> None:
         """Print one colored line of drone moves per turn.
 
         Args:
             paths: The planned path of each drone, keyed by drone id.
-            simple: If True, print only the moves, without drone counts.
+            detailed: If True, add the drone counts behind every move and
+                print a summary at the end. Otherwise print only the moves.
         """
         turns = self.create_turns(paths)
         for t in range(1, max(turns) + 1):
-            zones, links = self.count_drones(paths, t)
+            if detailed:
+                zones, links = self.count_drones(paths, t)
             try:
                 moves = turns[t]
             except KeyError:
@@ -81,12 +83,12 @@ class Visualizer:
             for text, target in moves:
                 if isinstance(target, Connection):
                     color = None
-                    if not simple:
+                    if detailed:
                         count = links[target.name]
                         text += f"[{count}/{target.max_link_capacity}]"
                 else:
                     color = target.color
-                    if not simple:
+                    if detailed:
                         count = zones[target.name]
                         if target.is_start or target.is_end:
                             text += f"[{count}]"
@@ -95,7 +97,7 @@ class Visualizer:
                                      f"{target.zone_type.value}]")
                 words.append(self.add_color(text, color))
             print(" ".join(words))
-        if not simple:
+        if detailed:
             total_turns = max(turns)
             arrivals = [path[-1][0] for path in paths.values()]
             print("\nSummary")
