@@ -97,14 +97,11 @@ class Visualizer:
             print(" ".join(words))
         if not simple:
             total_turns = max(turns)
-            total_moves = sum(len(moves) for moves in turns.values())
             arrivals = [path[-1][0] for path in paths.values()]
             print("\nSummary")
             print(f"  Drones:               {len(paths)}")
             print(f"  Total turns:          {total_turns}")
-            print(f"  Total moves:          {total_moves}")
             print(f"  Avg. arrival turn:    {sum(arrivals) / len(paths):.2f}")
-            print(f"  Avg. moves per turn:  {total_moves / total_turns:.2f}")
 
     def create_turns(
         self, paths: dict[str, list[tuple[int, Zone]]]

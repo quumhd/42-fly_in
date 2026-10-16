@@ -259,14 +259,14 @@ class Pathfinding:
         max_turns = (self.reservations.last_turn()
                      + self.dist_to_goal[self.start.name] + 1)
 
-        heap: list[tuple[int, int, str]] = [
-            (self.dist_to_goal[self.start.name], 0, self.start.name)
+        heap: list[tuple[int, int, int, str]] = [
+            (self.dist_to_goal[self.start.name], 0, 1, self.start.name)
         ]
         last_steps: dict[State, State] = {}
         seen: set[State] = set()
 
         while heap:
-            _estimation, turn, name = heapq.heappop(heap)
+            _estimation, turn, p, name = heapq.heappop(heap)
             zone = self.graph.zones[name]
             if zone is self.end:
                 return self.rebuild(last_steps, (turn, name))
@@ -282,7 +282,8 @@ class Pathfinding:
                 seen.add(new_state)
                 last_steps[new_state] = (turn, name)
                 estimation = new_turn + self.dist_to_goal[neighbour.name]
-                heapq.heappush(heap, (estimation, new_turn, neighbour.name))
+                p = 0 if neighbour.zone_type == ZoneType.PRIORITY else 1
+                heapq.heappush(heap, (estimation, new_turn, p, neighbour.name))
             if self.reservations.can_wait(zone, turn):
                 new_state = (turn + 1, zone.name)
                 if new_state in seen:
@@ -292,7 +293,8 @@ class Pathfinding:
                 seen.add(new_state)
                 last_steps[new_state] = (turn, name)
                 estimation = turn + 1 + self.dist_to_goal[zone.name]
-                heapq.heappush(heap, (estimation, turn + 1, zone.name))
+                p = 0 if zone.zone_type == ZoneType.PRIORITY else 1
+                heapq.heappush(heap, (estimation, turn + 1, p, zone.name))
         raise PathfindingError(
             f"no route within {max_turns} turns from start to end"
         )
